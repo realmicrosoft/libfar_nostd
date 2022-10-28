@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 pub struct FarFileInfo {
     pub name: String,
     pub size: u32,
-    offset: u32,
+    pub offset: u32,
 }
 
 /// Struct containing a file, whether or not it's in an archive.
@@ -170,29 +170,41 @@ pub fn test(file : &Vec<u8>) -> Result<FarArchive, String> {
 }
 
 fn list_files(file : &Vec<u8>) -> Result<Vec<FarFileInfo>, String> {
+    let mut read = 12;
     // manifest offset is at 12 bytes (u32)
     let mut offset = [0u8; 4];
-    offset.copy_from_slice(&file[12..16]);
+    offset.copy_from_slice(&file[read..16]);
+    read += 4;
     let offset = u32::from_le_bytes(offset);
+    read = offset as usize;
     // move to manifest
     // read u32 for number of files
     let mut num_files = [0u8; 4];
-    num_files.copy_from_slice(&file[offset as usize..offset as usize + 4]);
+    num_files.copy_from_slice(&file[read..read + 4]);
+    read += 4;
     let num_files = u32::from_le_bytes(num_files);
     // for each file, read u32 for size, u32 for size again (stored twice for some reason), u32 for offset, u32 for name length, name
     let mut files = Vec::new();
     for i in 0..num_files {
         let mut size = [0u8; 4];
-        size.copy_from_slice(&file[offset as usize + 4 + (i * 16) as usize..offset as usize + 8 + (i * 16) as usize]);
+        size.copy_from_slice(&file[read..read + 4]);
+        read += 4;
         let size = u32::from_le_bytes(size);
         let mut size2 = [0u8; 4];
-        size2.copy_from_slice(&file[offset as usize + 8 + (i * 16) as usize..offset as usize + 12 + (i * 16) as usize]);
+        size2.copy_from_slice(&file[read..read + 4]);
+        read += 4;
         let _size2 = u32::from_le_bytes(size2); // why is this stored twice? f*** you EA
+        let mut offset = [0u8; 4];
+        offset.copy_from_slice(&file[read..read + 4]);
+        read += 4;
+        let offset = u32::from_le_bytes(offset);
         let mut name_len = [0u8; 4];
-        name_len.copy_from_slice(&file[offset as usize + 16 + (i * 16) as usize..offset as usize + 20 + (i * 16) as usize]);
+        name_len.copy_from_slice(&file[read..read + 4]);
+        read += 4;
         let name_len = u32::from_le_bytes(name_len);
         let mut name = vec![0u8; name_len as usize];
-        name.copy_from_slice(&file[offset as usize + 20 + (i * 16) as usize..offset as usize + 20 + (i * 16) as usize + name_len as usize]);
+        name.copy_from_slice(&file[read..read + name_len as usize]);
+        read += name_len as usize;
         files.push(FarFileInfo {
             name: String::from_utf8(name).unwrap(),
             size,
